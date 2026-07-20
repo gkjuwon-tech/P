@@ -173,15 +173,39 @@ function renderHistory() {
   });
 }
 
+function collectLogs() {
+  const logs = {};
+  document.querySelectorAll("#logs textarea").forEach((ta) => {
+    logs[ta.dataset.id] = ta.value;
+  });
+  return logs;
+}
+
 async function runEvaluation() {
   const btn = $("#evaluate-btn");
   const status = $("#eval-status");
   btn.disabled = true;
   status.textContent = "AI가 평가 중입니다... (최대 30초)";
   try {
-    const { period } = await api("/api/evaluate", { method: "POST" });
+    // 현재 textarea의 최신 기록을 함께 보낸다 (저장 지연과 무관하게 정확히 평가).
+    const { period } = await api("/api/evaluate", {
+      method: "POST",
+      body: JSON.stringify({ logs: collectLogs() }),
+    });
     status.textContent = "완료 ✓";
-    await load();
+    // 응답값으로 로컬 상태 갱신 (쓰기 직후 재조회 시 지연 회피)
+    const afterById = new Map(period.adjustments.map((a) => [a.id, a.after]));
+    STATE.members = STATE.members.map((m) => ({
+      ...m,
+      equity: afterById.has(m.id) ? afterById.get(m.id) : m.equity,
+    }));
+    STATE.currentLogs = {};
+    STATE.history = [period, ...STATE.history];
+    STATE.periodIndex = STATE.history.length + 1;
+    renderEquity();
+    renderLogs();
+    renderHistory();
+    $("#period-label").textContent = `${STATE.periodIndex}회차 진행 중`;
     renderResult(period);
     $("#result-card").scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (e) {
@@ -194,8 +218,16 @@ async function runEvaluation() {
 
 async function resetAll() {
   if (!confirm("지분·기록·히스토리를 모두 초기 상태(40/20/20/20)로 되돌립니다. 계속할까요?")) return;
-  await api("/api/reset", { method: "POST" });
-  await load();
+  const { members } = await api("/api/reset", { method: "POST" });
+  STATE.members = members;
+  STATE.currentLogs = {};
+  STATE.history = [];
+  STATE.periodIndex = 1;
+  renderEquity();
+  renderLogs();
+  renderHistory();
+  renderResult(null);
+  $("#period-label").textContent = `1회차 진행 중`;
 }
 
 function escape(s) {
