@@ -1,0 +1,15 @@
+{
+  "name": "team-equity-vesting",
+  "version": "1.0.0",
+  "description": "2주 단위 AI 평가 기반 야매 베스팅(지분 조정) 앱",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  }
+}

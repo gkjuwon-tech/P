@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>팀 지분 베스팅</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <h1>🪙 팀 지분 베스팅</h1>
+      <p class="sub">2주마다 각자 한 일을 적으면 AI가 평가해 지분을 조정합니다. (1회 최대 ±5%p, 합계 100% 유지)</p>
+      <div id="mode-badge" class="badge hidden"></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- 현재 지분 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>현재 지분</h2>
+        <span id="period-label" class="pill"></span>
+      </div>
+      <div id="equity-bars" class="equity-bars"></div>
+    </section>
+
+    <!-- 이번 회차 업무 기록 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>이번 2주 업무 기록</h2>
+      </div>
+      <p class="hint">각자 한 일을 구체적으로 적을수록 정확히 평가됩니다. (성과·수치·결과물 위주)</p>
+      <div id="logs" class="logs"></div>
+
+      <div class="actions">
+        <button id="evaluate-btn" class="primary">🤖 AI 평가 & 지분 조정 실행</button>
+        <span id="eval-status" class="status"></span>
+      </div>
+    </section>
+
+    <!-- 최근 평가 결과 -->
+    <section id="result-card" class="card hidden">
+      <div class="card-head"><h2>최근 평가 결과</h2></div>
+      <div id="result"></div>
+    </section>
+
+    <!-- 히스토리 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>지난 회차 기록</h2>
+        <button id="reset-btn" class="ghost danger">전체 초기화</button>
+      </div>
+      <div id="history" class="history"></div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <span>야매 베스팅 · Deepseek 평가 기반</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
