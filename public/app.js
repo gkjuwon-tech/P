@@ -1,59 +1,40 @@
-const COLORS = ["#4f8cff", "#3ecf8e", "#ffb545", "#c46bff", "#ff5d6c", "#3ec8d8"];
 let STATE = null;
-
 const $ = (sel) => document.querySelector(sel);
 
 async function api(path, opts) {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
+  if (!res.ok) throw new Error(data.error || `요청에 실패했습니다 (${res.status})`);
   return data;
 }
 
 function fmtDate(iso) {
   const d = new Date(iso);
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}. ${p(d.getMonth() + 1)}. ${p(d.getDate())}`;
 }
-
-function memberColor(idx) { return COLORS[idx % COLORS.length]; }
 
 async function load() {
   STATE = await api("/api/state");
-  renderBadge();
   renderEquity();
   renderLogs();
   renderResult(STATE.history[0]);
   renderHistory();
-  $("#period-label").textContent = `${STATE.periodIndex}회차 진행 중`;
-}
-
-function renderBadge() {
-  const b = $("#mode-badge");
-  b.classList.remove("hidden", "mock", "live");
-  if (STATE.hasApiKey) {
-    b.classList.add("live");
-    b.textContent = "✅ Deepseek 실시간 평가 모드";
-  } else {
-    b.classList.add("mock");
-    b.textContent = "⚠️ 목(mock) 평가 모드 — .env에 DEEPSEEK_API_KEY 설정 필요";
-  }
+  $("#period-label").textContent = `${STATE.periodIndex}차 평가 진행 중`;
 }
 
 function renderEquity() {
-  const el = $("#equity-bars");
+  const el = $("#equity-table");
   el.innerHTML = "";
-  STATE.members.forEach((m, i) => {
+  STATE.members.forEach((m) => {
     const row = document.createElement("div");
     row.className = "eq-row";
     row.innerHTML = `
-      <div class="eq-top">
-        <div><span class="eq-name">${escape(m.name)}</span><span class="eq-role">${escape(m.role)}</span></div>
-        <div class="eq-pct">${m.equity}%</div>
+      <div class="eq-head">
+        <span class="eq-id"><span class="eq-name">${esc(m.name)}</span><span class="eq-role">${esc(m.role)}</span></span>
+        <span class="eq-pct">${m.equity}%</span>
       </div>
-      <div class="eq-track"><div class="eq-fill" style="width:${m.equity}%;background:${memberColor(i)}"></div></div>`;
+      <div class="eq-track"><div class="eq-fill" style="width:${m.equity}%"></div></div>`;
     el.appendChild(row);
   });
 }
@@ -67,10 +48,10 @@ function renderLogs() {
     item.className = "log-item";
     item.innerHTML = `
       <div class="log-head">
-        <span class="log-name">${escape(m.name)} <span class="eq-role">${escape(m.role)}</span></span>
+        <span class="log-name">${esc(m.name)}<span class="log-role">${esc(m.role)}</span></span>
         <span class="log-save" data-save="${m.id}"></span>
       </div>
-      <textarea data-id="${m.id}" placeholder="이번 2주간 한 일을 구체적으로 적어주세요...">${escape(val)}</textarea>`;
+      <textarea data-id="${m.id}" placeholder="이번 평가 기간의 주요 업무와 성과를 작성합니다.">${esc(val)}</textarea>`;
     el.appendChild(item);
   });
 
@@ -79,16 +60,13 @@ function renderLogs() {
     ta.addEventListener("input", () => {
       clearTimeout(timer);
       const badge = el.querySelector(`[data-save="${ta.dataset.id}"]`);
-      badge.textContent = "입력 중...";
+      badge.textContent = "입력 중";
       timer = setTimeout(async () => {
         try {
-          await api("/api/logs", {
-            method: "POST",
-            body: JSON.stringify({ memberId: ta.dataset.id, text: ta.value }),
-          });
-          badge.textContent = "저장됨 ✓";
-          setTimeout(() => (badge.textContent = ""), 1500);
-        } catch (e) {
+          await api("/api/logs", { method: "POST", body: JSON.stringify({ memberId: ta.dataset.id, text: ta.value }) });
+          badge.textContent = "저장됨";
+          setTimeout(() => (badge.textContent = ""), 1400);
+        } catch {
           badge.textContent = "저장 실패";
         }
       }, 600);
@@ -96,16 +74,8 @@ function renderLogs() {
   });
 }
 
-function changeClass(delta) {
-  if (delta > 0) return "up";
-  if (delta < 0) return "down";
-  return "flat";
-}
-function changeText(delta) {
-  if (delta > 0) return `▲ +${delta}%p`;
-  if (delta < 0) return `▼ ${delta}%p`;
-  return "– 0%p";
-}
+function changeClass(d) { return d > 0 ? "pos" : d < 0 ? "neg" : "flat"; }
+function changeText(d) { return d > 0 ? `+${d}%p` : d < 0 ? `${d}%p` : "0%p"; }
 
 function renderResult(period) {
   const card = $("#result-card");
@@ -118,27 +88,27 @@ function renderResult(period) {
     return `
       <div class="adj-row">
         <div class="adj-left">
-          <span class="adj-name">${escape(a.name)}</span>
-          <span class="adj-summary">${escape(ev.summary || "")}</span>
+          <div class="adj-name">${esc(a.name)}</div>
+          <div class="adj-summary">${esc(ev.summary || "")}</div>
         </div>
         <div class="adj-right">
-          <div class="adj-score">점수 ${ev.score ?? "-"}점 · ${a.before}% → ${a.after}%</div>
+          <div class="adj-meta">평가 ${ev.score ?? "-"} · ${a.before}% → ${a.after}%</div>
           <div class="adj-change ${changeClass(a.delta)}">${changeText(a.delta)}</div>
         </div>
       </div>`;
   }).join("");
 
   $("#result").innerHTML = `
-    <div class="hist-meta" style="margin-bottom:8px">${period.id} · ${fmtDate(period.end)}${period.mock ? " · 목 모드" : ""}</div>
+    <div class="result-date">${esc(period.id)} · ${fmtDate(period.end)}</div>
     ${rows}
-    ${period.overallComment ? `<div class="overall">🧠 ${escape(period.overallComment)}</div>` : ""}`;
+    ${period.overallComment ? `<div class="overall">${esc(period.overallComment)}</div>` : ""}`;
 }
 
 function renderHistory() {
   const el = $("#history");
   el.innerHTML = "";
   if (!STATE.history.length) {
-    el.innerHTML = `<div class="empty">아직 완료된 평가 회차가 없습니다.</div>`;
+    el.innerHTML = `<div class="empty">완료된 평가 기록이 없습니다.</div>`;
     return;
   }
   STATE.history.forEach((p) => {
@@ -149,11 +119,11 @@ function renderHistory() {
       const ev = evalById.get(a.id) || {};
       return `<div class="adj-row">
         <div class="adj-left">
-          <span class="adj-name">${escape(a.name)}</span>
-          <span class="adj-summary">${escape(ev.reasoning || ev.summary || "")}</span>
+          <div class="adj-name">${esc(a.name)}</div>
+          <div class="adj-summary">${esc(ev.reasoning || ev.summary || "")}</div>
         </div>
         <div class="adj-right">
-          <div class="adj-score">점수 ${ev.score ?? "-"}점 · ${a.before}% → ${a.after}%</div>
+          <div class="adj-meta">평가 ${ev.score ?? "-"} · ${a.before}% → ${a.after}%</div>
           <div class="adj-change ${changeClass(a.delta)}">${changeText(a.delta)}</div>
         </div>
       </div>`;
@@ -161,23 +131,25 @@ function renderHistory() {
 
     item.innerHTML = `
       <div class="hist-head">
-        <span class="hist-title">${p.id} <span class="hist-meta">${fmtDate(p.start)} ~ ${fmtDate(p.end)}${p.mock ? " · 목" : ""}</span></span>
-        <span class="hist-meta">▾</span>
+        <span class="hist-title">${esc(p.id)}<span class="hist-meta">${fmtDate(p.start)} – ${fmtDate(p.end)}</span></span>
+        <span class="hist-toggle">보기</span>
       </div>
       <div class="hist-body">
         ${details}
-        ${p.overallComment ? `<div class="overall">🧠 ${escape(p.overallComment)}</div>` : ""}
+        ${p.overallComment ? `<div class="overall">${esc(p.overallComment)}</div>` : ""}
       </div>`;
-    item.querySelector(".hist-head").addEventListener("click", () => item.classList.toggle("open"));
+    const toggle = item.querySelector(".hist-toggle");
+    item.querySelector(".hist-head").addEventListener("click", () => {
+      item.classList.toggle("open");
+      toggle.textContent = item.classList.contains("open") ? "닫기" : "보기";
+    });
     el.appendChild(item);
   });
 }
 
 function collectLogs() {
   const logs = {};
-  document.querySelectorAll("#logs textarea").forEach((ta) => {
-    logs[ta.dataset.id] = ta.value;
-  });
+  document.querySelectorAll("#logs textarea").forEach((ta) => { logs[ta.dataset.id] = ta.value; });
   return logs;
 }
 
@@ -185,31 +157,23 @@ async function runEvaluation() {
   const btn = $("#evaluate-btn");
   const status = $("#eval-status");
   btn.disabled = true;
-  status.textContent = "AI가 평가 중입니다... (최대 30초)";
+  status.textContent = "평가를 진행하고 있습니다.";
   try {
-    // 현재 textarea의 최신 기록을 함께 보낸다 (저장 지연과 무관하게 정확히 평가).
-    const { period } = await api("/api/evaluate", {
-      method: "POST",
-      body: JSON.stringify({ logs: collectLogs() }),
-    });
-    status.textContent = "완료 ✓";
-    // 응답값으로 로컬 상태 갱신 (쓰기 직후 재조회 시 지연 회피)
+    const { period } = await api("/api/evaluate", { method: "POST", body: JSON.stringify({ logs: collectLogs() }) });
+    status.textContent = "완료되었습니다.";
     const afterById = new Map(period.adjustments.map((a) => [a.id, a.after]));
-    STATE.members = STATE.members.map((m) => ({
-      ...m,
-      equity: afterById.has(m.id) ? afterById.get(m.id) : m.equity,
-    }));
+    STATE.members = STATE.members.map((m) => ({ ...m, equity: afterById.has(m.id) ? afterById.get(m.id) : m.equity }));
     STATE.currentLogs = {};
     STATE.history = [period, ...STATE.history];
     STATE.periodIndex = STATE.history.length + 1;
     renderEquity();
     renderLogs();
     renderHistory();
-    $("#period-label").textContent = `${STATE.periodIndex}회차 진행 중`;
+    $("#period-label").textContent = `${STATE.periodIndex}차 평가 진행 중`;
     renderResult(period);
-    $("#result-card").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("#result-card").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
-    status.textContent = "❌ " + e.message;
+    status.textContent = e.message;
   } finally {
     btn.disabled = false;
     setTimeout(() => (status.textContent = ""), 4000);
@@ -217,7 +181,7 @@ async function runEvaluation() {
 }
 
 async function resetAll() {
-  if (!confirm("지분·기록·히스토리를 모두 초기 상태(40/20/20/20)로 되돌립니다. 계속할까요?")) return;
+  if (!confirm("지분과 기록을 초기 상태로 되돌립니다. 계속하시겠습니까?")) return;
   const { members } = await api("/api/reset", { method: "POST" });
   STATE.members = members;
   STATE.currentLogs = {};
@@ -227,13 +191,13 @@ async function resetAll() {
   renderLogs();
   renderHistory();
   renderResult(null);
-  $("#period-label").textContent = `1회차 진행 중`;
+  $("#period-label").textContent = `1차 평가 진행 중`;
 }
 
-function escape(s) {
+function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 $("#evaluate-btn").addEventListener("click", runEvaluation);
 $("#reset-btn").addEventListener("click", resetAll);
-load().catch((e) => alert("로드 실패: " + e.message));
+load().catch((e) => alert("불러오기에 실패했습니다: " + e.message));

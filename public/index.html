@@ -3,60 +3,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>팀 지분 베스팅</title>
+  <title>지분 평가</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="wrap">
-      <h1>🪙 팀 지분 베스팅</h1>
-      <p class="sub">2주마다 각자 한 일을 적으면 AI가 평가해 지분을 조정합니다. (1회 최대 ±5%p, 합계 100% 유지)</p>
-      <div id="mode-badge" class="badge hidden"></div>
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">EQUITY REVIEW</span>
+      </div>
+      <span id="period-label" class="period-tag"></span>
     </div>
   </header>
 
   <main class="wrap">
+    <section class="intro">
+      <h1>지분 평가 및 조정</h1>
+      <p>2주 단위로 각 구성원의 업무 성과를 평가하여 지분을 조정합니다. 1회 조정 한도는 인당 ±5%p이며, 지분 총합은 항상 100%로 유지됩니다.</p>
+    </section>
+
     <!-- 현재 지분 -->
     <section class="card">
       <div class="card-head">
         <h2>현재 지분</h2>
-        <span id="period-label" class="pill"></span>
       </div>
-      <div id="equity-bars" class="equity-bars"></div>
+      <div id="equity-table" class="equity-table"></div>
     </section>
 
-    <!-- 이번 회차 업무 기록 -->
+    <!-- 업무 기록 -->
     <section class="card">
       <div class="card-head">
-        <h2>이번 2주 업무 기록</h2>
+        <h2>업무 기록</h2>
+        <span class="card-note">이번 평가 기간</span>
       </div>
-      <p class="hint">각자 한 일을 구체적으로 적을수록 정확히 평가됩니다. (성과·수치·결과물 위주)</p>
+      <p class="hint">담당 업무의 성과를 구체적으로 작성합니다. 결과물, 수치, 진척도를 중심으로 기술할수록 평가가 정확해집니다.</p>
       <div id="logs" class="logs"></div>
 
       <div class="actions">
-        <button id="evaluate-btn" class="primary">🤖 AI 평가 & 지분 조정 실행</button>
+        <button id="evaluate-btn" class="btn btn-primary">평가 실행</button>
         <span id="eval-status" class="status"></span>
       </div>
     </section>
 
-    <!-- 최근 평가 결과 -->
+    <!-- 평가 결과 -->
     <section id="result-card" class="card hidden">
-      <div class="card-head"><h2>최근 평가 결과</h2></div>
+      <div class="card-head"><h2>평가 결과</h2></div>
       <div id="result"></div>
     </section>
 
-    <!-- 히스토리 -->
+    <!-- 지난 기록 -->
     <section class="card">
       <div class="card-head">
-        <h2>지난 회차 기록</h2>
-        <button id="reset-btn" class="ghost danger">전체 초기화</button>
+        <h2>지난 평가 기록</h2>
+        <button id="reset-btn" class="btn btn-ghost">초기화</button>
       </div>
       <div id="history" class="history"></div>
     </section>
   </main>
 
   <footer class="wrap foot">
-    <span>야매 베스팅 · Deepseek 평가 기반</span>
+    <span>Equity Review</span>
   </footer>
 
   <script src="/app.js"></script>
