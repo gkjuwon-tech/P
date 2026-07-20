@@ -1,7 +1,7 @@
 {
   "name": "team-equity-vesting",
   "version": "1.0.0",
-  "description": "2주 단위 AI 평가 기반 야매 베스팅(지분 조정) 앱",
+  "description": "2주 단위 업무 성과 평가 기반 지분 조정 애플리케이션",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -12,8 +12,5 @@
     "@vercel/blob": "^0.27.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
-  },
-  "devDependencies": {
-    "playwright": "^1.61.1"
   }
 }
