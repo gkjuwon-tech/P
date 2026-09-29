@@ -92,6 +92,9 @@ def encode_once(*a, **k):
         pipe.text_encoder.to("cpu"); pipe.text_encoder_2.to("cpu"); torch.cuda.empty_cache()
     return _cache["r"]
 pipe.encode_prompt = encode_once
+# diffusers infers the execution device from the first module it finds, which is now a CPU
+# text encoder; pin it so latents and generators stay on the GPU.
+type(pipe)._execution_device = property(lambda self: torch.device(dev))
 
 views = {}
 for name, ref in refs.items():
@@ -100,6 +103,8 @@ for name, ref in refs.items():
     ims, _ = run_pipeline(pipe, num_views=6, text="high quality", image=ref, height=768, width=768,
                           num_inference_steps=50, guidance_scale=3.0, seed=42, device=dev, azimuth_deg=AZ)
     views[name] = ims
+    for az, im in zip(AZ, ims):
+        im.save(f"{OUT}/{name}/view_az{az:03d}_rgb.png")
     print(f"[mv] {name} {time.time()-t:.1f}s peak={torch.cuda.max_memory_allocated()/2**30:.1f}GB", flush=True)
 del pipe; torch.cuda.empty_cache()
 
@@ -108,7 +113,6 @@ for name, ims in views.items():
     d = f"{OUT}/{name}"
     ref = refs[name].copy(); ref.putalpha(alpha_of(refs[name])); ref.save(f"{d}/input_reference_rgba.png")
     for az, im in zip(AZ, ims):
-        im.save(f"{d}/view_az{az:03d}_rgb.png")
         a = alpha_of(im); rgba = im.copy(); rgba.putalpha(a)
         rgba.save(f"{d}/view_az{az:03d}_rgba.png")
     json.dump({"azimuth_deg": AZ, "elevation_deg": [0]*6, "camera": "orthographic",
