@@ -27,6 +27,12 @@ open(f"{T}/mva/mvadapter/utils/mesh_utils/__init__.py", "w").write(
     "from .camera import Camera, get_c2w, get_camera, get_orthogonal_camera, "
     "get_orthogonal_projection_matrix, get_projection_matrix\n")
 sh(f"sed -i 's/^import nvdiffrast.torch as dr$/dr = None/' {T}/mva/mvadapter/utils/mesh_utils/utils.py")
+# T4 (14.5GB) OOMs at 6 views x CFG. The reference-attention cache is passed as a clone while the
+# original is still alive, doubling ~1GB of activations; the processors never modify it in place.
+sh(f"sed -i 's/{{k: v.clone() for k, v in ref_hidden_states.items()}}/ref_hidden_states/' "
+   f"{T}/mva/mvadapter/pipelines/pipeline_mvadapter_i2mv_sdxl.py")
+sh(f"grep -n '\"ref_hidden_states\": ref_hidden_states' {T}/mva/mvadapter/pipelines/pipeline_mvadapter_i2mv_sdxl.py")
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 INPUTS = {
     "anime_figurine": "https://raw.githubusercontent.com/huanngzh/MV-Adapter/main/assets/demo/i2mv/A_decorative_figurine_of_a_young_anime-style_girl.png",
@@ -77,17 +83,22 @@ pipe = prepare_pipeline(base_model="stabilityai/stable-diffusion-xl-base-1.0",
                         vae_model="madebyollin/sdxl-vae-fp16-fix", unet_model=None, lora_model=None,
                         adapter_path="huanngzh/mv-adapter", scheduler=None, num_views=6,
                         device=dev, dtype=torch.float16)
+# The prompt is the same for every asset: encode it once, then park both text encoders
+# (~1.6GB fp16) on the CPU for the rest of the run.
+_encode, _cache = pipe.encode_prompt, {}
+def encode_once(*a, **k):
+    if "r" not in _cache:
+        _cache["r"] = _encode(*a, **k)
+        pipe.text_encoder.to("cpu"); pipe.text_encoder_2.to("cpu"); torch.cuda.empty_cache()
+    return _cache["r"]
+pipe.encode_prompt = encode_once
+
 views = {}
 for name, ref in refs.items():
     t = time.time()
-    try:
-        ims, _ = run_pipeline(pipe, num_views=6, text="high quality", image=ref, height=768, width=768,
-                              num_inference_steps=50, guidance_scale=3.0, seed=42, device=dev, azimuth_deg=AZ)
-    except torch.cuda.OutOfMemoryError:
-        print("OOM -> retry with cpu offload", flush=True)
-        torch.cuda.empty_cache(); pipe.to("cpu"); pipe.enable_model_cpu_offload()
-        ims, _ = run_pipeline(pipe, num_views=6, text="high quality", image=ref, height=768, width=768,
-                              num_inference_steps=50, guidance_scale=3.0, seed=42, device=dev, azimuth_deg=AZ)
+    torch.cuda.reset_peak_memory_stats()
+    ims, _ = run_pipeline(pipe, num_views=6, text="high quality", image=ref, height=768, width=768,
+                          num_inference_steps=50, guidance_scale=3.0, seed=42, device=dev, azimuth_deg=AZ)
     views[name] = ims
     print(f"[mv] {name} {time.time()-t:.1f}s peak={torch.cuda.max_memory_allocated()/2**30:.1f}GB", flush=True)
 del pipe; torch.cuda.empty_cache()
