@@ -16,7 +16,8 @@ def sh(cmd, check=True):
 
 
 sh("nvidia-smi")
-sh(f"{sys.executable} -m pip install -q einops omegaconf kornia timm peft trimesh")
+sh(f"{sys.executable} -m pip install -q einops omegaconf kornia timm peft trimesh jaxtyping typeguard")
+sh(f"{sys.executable} -c 'import torch, diffusers, transformers; print(torch.__version__, diffusers.__version__, transformers.__version__)'")
 sh(f"git clone -q --depth 1 https://github.com/huanngzh/MV-Adapter {T}/mva")
 sh(f"git clone -q --depth 1 https://github.com/hugoycj/StableNormal {T}/sn")
 
@@ -141,10 +142,10 @@ print("stage2 done", flush=True)
 open(f"{T}/stage1.py", "w").write(STAGE1)
 open(f"{T}/stage2.py", "w").write(STAGE2)
 sh(f"{sys.executable} {T}/stage1.py")
-if sh(f"{sys.executable} {T}/stage2.py", check=False) != 0:
-    print("stage2 failed with current packages; retrying with StableNormal's pinned diffusers", flush=True)
-    sh(f"{sys.executable} -m pip install -q 'diffusers==0.28.0' 'huggingface_hub<0.26'")
-    sh(f"{sys.executable} {T}/stage2.py")
+# StableNormal's remote code imports diffusers.models.controlnet (gone in newer diffusers);
+# this combination was verified to load and run yoso-normal-v1-8-1.
+sh(f"{sys.executable} -m pip install -q 'diffusers==0.31.0' 'transformers==4.46.3' 'huggingface_hub<0.26'")
+sh(f"{sys.executable} {T}/stage2.py")
 
 # contact sheets
 from PIL import Image
