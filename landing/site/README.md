@@ -43,3 +43,10 @@ node tools/record.mjs --stills   # 주요 지점 스틸만 빠르게
 - 영상은 `<source>` 순서대로 VP9 webm → H.264 mp4. (Safari는 mp4)
 - 브랜드명 `PLINTH`는 가칭입니다. `index.html`의 텍스트만 바꾸면 됩니다.
 - 모바일: 입자 수 1/2.25, DPR 1.5 상한. `prefers-reduced-motion`이면 부드러운 스크롤/형성 연출 생략.
+
+## 배포 (GitHub Pages)
+
+라이브: https://gkjuwon-tech.github.io/P/ — `gh-pages` 브랜치를 그대로 서빙합니다.
+
+`npm run build` 후 `dist/`에서 사이트가 실제로 쓰는 파일만 골라 `gh-pages`에 올립니다:
+`index.html`, `assets/*`(js·css·woff2), `.nojekyll`, 그리고 영상은 클립마다 `*_packed.webm`, `*_packed.mp4`와 `hero-turntable_poster.webp`만.
