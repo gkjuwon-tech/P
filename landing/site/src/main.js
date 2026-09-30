@@ -194,8 +194,9 @@ function pinnedProgress(el, vh) {
   return clamp(-r.top / (r.height - vh));
 }
 
-function setY(el, pct) {
-  el.style.transform = `translate3d(0, ${pct}%, 0)`;
+// text never moves: it only fades in and out in place
+function fade(el, o) {
+  el.style.opacity = o;
 }
 
 // Knot -> scanning ring. B: 0 = hero knot, 0.2 = untied into a halo above the head, 1 = figure built.
@@ -210,10 +211,10 @@ function ring(s, B, t) {
   s.flow = t;
   s.sweep = sweep;
   s.ringY = B < 0.2 ? 1.38 : Math.max(sweep, -1.3);
-  s.tilt = 0.3;
+  s.tilt = 0; // flat: perspective alone gives the right angle above and below eye level
   s.ringR = 0.6;
   s.ringr = 0.03;
-  s.ringAlpha = 1 - ss(0.88, 1.0, B);
+  s.ringAlpha = 0.55 * (1 - ss(0.88, 1.0, B));
 }
 
 // Compute everything for time t (seconds). Returns GL state + desired video times.
@@ -248,12 +249,7 @@ function update(t) {
       if (r.hero) r.t0 = T.intro + 0.35;
       else if (r.el.getBoundingClientRect().top < vh * 0.88) r.t0 = t;
     }
-    const k = r.t0 === null ? 0 : easeOut((t - r.t0 - r.delay) / (r.kind === 'r' ? 1.25 : 1.1));
-    if (r.kind === 'r') setY(r.el, (1 - k) * 110);
-    else {
-      r.el.style.opacity = k;
-      r.el.style.transform = `translate3d(0, ${(1 - k) * 18}px, 0)`;
-    }
+    fade(r.el, r.t0 === null ? 0 : ss(0, 1, (t - r.t0 - r.delay) / 1.1));
   }
 
   // --- hero details ---
@@ -271,12 +267,12 @@ function update(t) {
     const [a, b] = STAGE_RANGES[i];
     const enter = i === 0 ? 1 : ss(a - 0.005, a + 0.03, P);
     const leave = i === stages.length - 1 ? 0 : ss(b - 0.03, b + 0.005, P);
-    setY(s.h, (1 - enter) * 110 - leave * 110);
+    fade(s.h, enter * (1 - leave));
   });
   promptLines.forEach((el, i) => {
     const enter = ss(-0.06 + i * 0.012, 0.0 + i * 0.012, P);
     const leave = ss(0.085, 0.125, P);
-    setY(el, (1 - enter) * 110 - leave * 110);
+    fade(el, enter * (1 - leave));
   });
   railFill.style.transform = `scaleY(${P})`;
 
@@ -284,7 +280,7 @@ function update(t) {
   stLines.forEach((el, i) => {
     const enter = ss(0.16 + i * 0.2, 0.3 + i * 0.2, S);
     const leave = ss(0.84, 0.96, S);
-    setY(el, (1 - enter) * 110 - leave * 110);
+    fade(el, enter * (1 - leave));
   });
 
   // --- pointer (smoothed) ---

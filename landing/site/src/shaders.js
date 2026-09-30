@@ -112,7 +112,7 @@ export const pointsVert = /* glsl */ `
     float d = packedDepth(uTex, uv);
     float vis = smoothstep(0.35, 0.6, a);
     // particles outside the figure: a share of them only ever makes up the ring
-    float ringOnly = (1.0 - step(0.5, vis)) * step(aRnd.z, 0.38);
+    float ringOnly = (1.0 - step(0.5, vis)) * step(aRnd.z, 0.2);
 
     vec3 target = vec3((uv.x - 0.5) * uSize.x, (uv.y - 0.5) * uSize.y, (d - 0.35) * uDepth);
 
@@ -150,7 +150,7 @@ export const pointsVert = /* glsl */ `
     vec3 shapeP = mix(kp, tp, m);
     vec3 sw = vec3(snoise(kp * 0.8 + 3.0), snoise(kp * 0.8 + 9.0), snoise(kp * 0.8 + 15.0));
     shapeP += sw * sin(m * 3.14159) * 0.35;
-    shapeBright = mix(shapeBright, 0.9, m);
+    shapeBright = mix(shapeBright, 0.42, m);
 
     // gather into the shape from a loose sphere, staggered
     vec3 dir = normalize(aRnd.xyz - 0.5 + 1e-4);
