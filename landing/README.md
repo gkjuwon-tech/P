@@ -1,5 +1,7 @@
 # Landing — 영상 에셋
 
+> 랜딩 페이지는 [`site/`](site/), 데스크톱 스크롤 녹화는 [`recordings/plinth-desktop-scroll.mp4`](recordings/plinth-desktop-scroll.mp4).
+
 Google Flow(Veo)로 생성한 원본 3개를 누끼 → 깊이맵 → 웹용 인코딩까지 처리한 결과물입니다.
 
 ## 에셋 목록
@@ -17,6 +19,7 @@ Google Flow(Veo)로 생성한 원본 3개를 누끼 → 깊이맵 → 웹용 인
 | 파일 | 형식 | 언제 쓰나 |
 |---|---|---|
 | `<name>_packed.mp4` | H.264, 세로 3단: **컬러 / 알파 / 깊이** | WebGL 파티클 모드. 텍스처 하나로 전부 샘플링 |
+| `<name>_packed.webm` | VP9, 같은 3단 구성 | H.264가 없는 Chromium 빌드용 (사이트가 먼저 시도) |
 | `<name>_stacked.mp4` | H.264, 세로 2단: **컬러 / 알파** | WebGL 일반 합성 (모든 브라우저, 모바일) |
 | `<name>.webm` | VP9 + 알파 | DOM `<video>`에 바로 투명 재생 (Chrome/Edge/Firefox. Safari는 stacked 사용) |
 | `<name>_depth.mp4` | H.264, 깊이만 | 디버그 / 별도 합성 |

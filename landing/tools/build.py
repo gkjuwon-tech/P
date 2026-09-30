@@ -4,6 +4,7 @@ Per clip writes to OUT/<name>/:
   <name>.webm            VP9 + alpha            (Chrome/Edge/Firefox, DOM <video>)
   <name>_stacked.mp4     H.264, colour over alpha (all browsers, WebGL)
   <name>_packed.mp4      H.264, colour / alpha / depth rows (WebGL particles)
+  <name>_packed.webm     same, VP9 (Chromium builds without H.264)
   <name>_depth.mp4       H.264, depth only (white = near)
   <name>_poster.webp     first frame, RGBA
   <name>_master_green.mp4  full-frame 1280x720 on clean green, watermark removed, edits applied
@@ -101,6 +102,8 @@ for clip, cfg in CLIPS.items():
                           '-row-mt', '1', '-g', '12', '-auto-alt-ref', '0', f'{d}/{name}.webm'])
     ffmpeg(inp('stk') + x264 + ['-crf', '18', f'{d}/{name}_stacked.mp4'])
     ffmpeg(inp('pck') + x264 + ['-crf', '18', f'{d}/{name}_packed.mp4'])
+    ffmpeg(inp('pck') + ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv420p', '-b:v', '0', '-crf', '28', '-row-mt', '1',
+                         '-g', '12', '-auto-alt-ref', '0', f'{d}/{name}_packed.webm'])
     ffmpeg(inp('dep') + x264 + ['-crf', '20', f'{d}/{name}_depth.mp4'])
     ffmpeg(inp('grn') + ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'slow', '-crf', '14',
                          '-movflags', '+faststart', f'{d}/{name}_master_green.mp4'])
