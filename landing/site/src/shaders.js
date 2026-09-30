@@ -52,15 +52,38 @@ const noise = /* glsl */ `
   }
 `;
 
+// Shared transition: a 1-bit ordered-dither dissolve whose order follows the depth map
+// (nearest surfaces resolve first), broken up by low-frequency noise.
+const dissolve = /* glsl */ `
+  float bayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+  float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+  float bayer8(vec2 a) { return bayer4(0.5 * a) * 0.25 + bayer2(a); }
+  float maskKey(vec2 uv, float d) {
+    return clamp(0.78 - d * 0.7 + snoise(vec3(uv * vec2(7.0, 16.0), 3.1)) * 0.07, 0.0, 1.0);
+  }
+  // 0..1 progress -> how far past the threshold this key is, in band units (>= dither value means shown)
+  float maskAmount(float key, float p) { return ((p * 1.4 - 0.2) - key) / 0.2; }
+`;
+
 export const pointsVert = /* glsl */ `
   uniform sampler2D uTex;
   uniform vec2 uSize;          // world width / height of the figure
   uniform vec2 uCell;          // uv size of one grid cell (for jitter)
   uniform float uDepth;
   uniform float uTime;
-  uniform float uForm;         // 0 = scattered cloud, 1 = formed figure
-  uniform float uScatter;      // noise displacement
-  uniform float uDissolve;     // head-first upward dissolve
+  uniform float uForm;         // 0 = loose sphere, 1 = gathered into the shape
+  uniform float uKnot;         // 0 = torus knot, 1 = untied into the scanning ring
+  uniform vec3 uKnotPos;
+  uniform vec3 uKnotRot;       // x tilt, y spin, knot scale
+  uniform float uFlow;         // phase of the light running along the strand
+  uniform vec3 uRingPos;       // ring centre
+  uniform float uTilt;         // ring tilt towards the camera (rad)
+  uniform vec2 uRingR;         // major, minor radius
+  uniform float uSpin;
+  uniform float uSweep;        // world y of the build line: particles above it take their place in the figure
+  uniform float uRingAlpha;    // ring-only particles
+  uniform float uMaskOut;      // dither-dissolve the built figure away (0..1)
+  uniform float uScatter;
   uniform float uPointSize;
   uniform float uPixelRatio;
   uniform vec3 uMouse;
@@ -72,29 +95,77 @@ export const pointsVert = /* glsl */ `
   varying float vAlpha;
   ${packed}
   ${noise}
+  ${dissolve}
+
+  // (3,5) torus knot
+  vec3 knot(float t) {
+    float r = 2.0 + cos(5.0 * t);
+    return vec3(r * cos(3.0 * t), -sin(5.0 * t) * 1.25, r * sin(3.0 * t));
+  }
+  mat3 rotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
+  mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+
   void main() {
     vec2 uv = aUv + (aRnd.xy - 0.5) * uCell;
     float a = packedAlpha(uTex, uv);
     vec3 col = packedColor(uTex, uv);
     float d = packedDepth(uTex, uv);
+    float vis = smoothstep(0.35, 0.6, a);
+    // particles outside the figure: a share of them only ever makes up the ring
+    float ringOnly = (1.0 - step(0.5, vis)) * step(aRnd.z, 0.38);
 
     vec3 target = vec3((uv.x - 0.5) * uSize.x, (uv.y - 0.5) * uSize.y, (d - 0.35) * uDepth);
 
-    // formation: each particle arrives from a loose sphere, staggered
+    // --- torus knot: a fine woven strand, a faint dust halo, and long light streaks running along it ---
+    float comet = step(0.8, aRnd.w);
+    float halo = (1.0 - comet) * step(0.86, aRnd.z);
+    float lane = floor(aRnd.x * 22.0);
+    float speed = 0.22 + fract(lane * 0.618) * 0.2;
+    float tBody = aRnd.x * 6.28318;
+    float tComet = (lane + aRnd.y * 0.9) / 22.0 * 6.28318 + uFlow * speed;
+    float kt = mix(tBody, tComet, comet);
+    vec3 c0 = knot(kt);
+    vec3 T = normalize(knot(kt + 0.01) - c0);
+    vec3 N = normalize(cross(T, vec3(0.0, 1.0, 0.0)) + 1e-4);
+    vec3 Bn = cross(T, N);
+    float ph = aRnd.y * 6.28318 * 7.0 + aRnd.z * 6.28318;
+    float breathe = 0.8 + 0.3 * snoise(vec3(kt * 1.3, uTime * 0.25, 0.0));
+    float tube = breathe * (comet > 0.5 ? 0.05 : (halo > 0.5 ? 0.55 * aRnd.w + 0.2 : 0.2 * sqrt(aRnd.z)));
+    vec3 kp = c0 + (N * cos(ph) + Bn * sin(ph)) * tube;
+    kp = rotY(uKnotRot.y) * rotX(uKnotRot.x) * (kp * uKnotRot.z) + uKnotPos;
+    float headB = pow(aRnd.y, 4.0);
+    float shapeBright = comet > 0.5 ? 0.4 + headB * 2.2 : (halo > 0.5 ? 0.22 : 0.32 + aRnd.z * 0.28);
+    float shapeAlpha = halo > 0.5 ? 0.4 : 1.0;
+
+    // --- ring: the knot unties into it, keeping each particle's angle around the axis ---
+    float th = atan(c0.z, c0.x) + uSpin;
+    float R = uRingR.x + (aRnd.w - 0.5) * 0.015;
+    float rph = aRnd.y * 6.28318;
+    vec3 tp = vec3((R + uRingR.y * cos(rph)) * cos(th), uRingR.y * sin(rph), (R + uRingR.y * cos(rph)) * sin(th));
+    float ct = cos(uTilt), st = sin(uTilt);
+    tp = vec3(tp.x, tp.y * ct - tp.z * st, tp.y * st + tp.z * ct) + uRingPos;
+
+    // untie with a per-particle stagger so the strand peels apart rather than lerping as one
+    float m = smoothstep(aRnd.w * 0.4, aRnd.w * 0.4 + 0.6, uKnot);
+    vec3 shapeP = mix(kp, tp, m);
+    vec3 sw = vec3(snoise(kp * 0.8 + 3.0), snoise(kp * 0.8 + 9.0), snoise(kp * 0.8 + 15.0));
+    shapeP += sw * sin(m * 3.14159) * 0.35;
+    shapeBright = mix(shapeBright, 0.9, m);
+
+    // gather into the shape from a loose sphere, staggered
     vec3 dir = normalize(aRnd.xyz - 0.5 + 1e-4);
     vec3 from = dir * (2.2 + aRnd.w * 3.0) + vec3(0.0, 0.0, -1.5);
-    float t = smoothstep(aRnd.w * 0.55, aRnd.w * 0.55 + 0.45, uForm);
-    t = t * t * (3.0 - 2.0 * t);
-    vec3 pos = mix(from, target, t);
+    float g = smoothstep(aRnd.w * 0.55, aRnd.w * 0.55 + 0.45, uForm);
+    g = g * g * (3.0 - 2.0 * g);
+    vec3 ringP = mix(from, shapeP, g);
 
-    // drifting noise field
-    vec3 np = target * 1.4 + vec3(0.0, 0.0, uTime * 0.12);
-    vec3 n = vec3(snoise(np), snoise(np + 17.3), snoise(np + 41.9));
-    pos += n * uScatter * (0.8 + aRnd.w * 1.2);
+    // build: once the sweep has passed below a particle's place, it leaves the ring for it
+    float k = (1.0 - ringOnly) * clamp((target.y - uSweep) / 0.3 - aRnd.w * 0.3, 0.0, 1.0);
+    k = k * k * (3.0 - 2.0 * k);
+    vec3 pos = mix(ringP, target, k);
 
-    // dissolve from the head down, carried up and away
-    float f = clamp((uDissolve * 1.45 - (1.0 - uv.y) - aRnd.w * 0.35) / 0.35, 0.0, 1.0);
-    pos += (n * 1.1 + vec3(0.25, 0.9, 0.3)) * f * f * (0.6 + aRnd.z * 1.2);
+    vec3 np = pos * 1.4 + vec3(0.0, 0.0, uTime * 0.12);
+    pos += vec3(snoise(np), snoise(np + 17.3), snoise(np + 41.9)) * uScatter;
 
     // cursor repulsion
     vec2 dm = pos.xy - uMouse.xy;
@@ -106,12 +177,15 @@ export const pointsVert = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
 
-    float vis = smoothstep(0.35, 0.6, a);
+    // dither-dissolve out, same order as the planes use to come in
+    float out_ = step(aRnd.z, maskAmount(maskKey(uv, d), uMaskOut)) * k;
+
     float l = luma(col);
-    // black suit on black: shade by depth so the form still reads
-    vBright = 0.34 + l * 0.75 + d * 0.3 + push * 1.5;
-    vAlpha = uOpacity * vis * (1.0 - f * 0.4);
-    gl_PointSize = vis < 0.01 ? 0.0 : uPointSize * uPixelRatio * (0.75 + aRnd.z * 0.6) * (6.0 / -mv.z);
+    float figBright = 0.34 + l * 0.75 + d * 0.3;
+    vBright = mix(shapeBright, figBright, k) + push * 1.5;
+    float A = mix(vis, uRingAlpha, ringOnly) * g * (1.0 - out_) * mix(shapeAlpha, 1.0, max(k, m));
+    vAlpha = uOpacity * A;
+    gl_PointSize = A < 0.01 ? 0.0 : uPointSize * uPixelRatio * (0.75 + aRnd.z * 0.6 - (1.0 - k) * (1.0 - m) * 0.25) * (6.0 / -mv.z);
   }
 `;
 
@@ -134,47 +208,36 @@ export const planeVert = /* glsl */ `
   }
 `;
 
-// Video quad: sobel "wireframe", shaded fill, and a noisy bottom-up reveal with a scan line.
+// Video quad with the dither dissolve in (uIn) and out (uOut).
 export const planeFrag = /* glsl */ `
   uniform sampler2D uTex;
-  uniform vec2 uTexel;         // 1 / (width, height of one row)
   uniform float uOpacity;
-  uniform float uWire;
-  uniform float uFill;
-  uniform float uReveal;       // 1 = fully shown
+  uniform float uIn;
+  uniform float uOut;
   uniform float uExposure;
-  uniform float uTime;
+  uniform float uLift;         // lift dark surfaces by depth (so they survive the ASCII pass)
+  uniform float uPixelRatio;
   varying vec2 vUv;
   ${packed}
   ${noise}
-  float lumAt(vec2 uv) { return luma(packedColor(uTex, uv)) + packedAlpha(uTex, uv) * 0.25; }
+  ${dissolve}
   void main() {
     vec2 uv = vUv;
     float a = packedAlpha(uTex, uv);
-    vec3 col = packedColor(uTex, uv);
-    float l = luma(col) * uExposure;
+    float d = packedDepth(uTex, uv);
+    float l = luma(packedColor(uTex, uv)) * uExposure;
 
-    vec2 e = uTexel;
-    float tl = lumAt(uv + vec2(-e.x, e.y)), t = lumAt(uv + vec2(0.0, e.y)), tr = lumAt(uv + vec2(e.x, e.y));
-    float ml = lumAt(uv + vec2(-e.x, 0.0)), mr = lumAt(uv + vec2(e.x, 0.0));
-    float bl = lumAt(uv + vec2(-e.x, -e.y)), b = lumAt(uv + vec2(0.0, -e.y)), br = lumAt(uv + vec2(e.x, -e.y));
-    float gx = -tl - 2.0 * ml - bl + tr + 2.0 * mr + br;
-    float gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
-    float edge = smoothstep(0.06, 0.26, length(vec2(gx, gy)));
+    float key = maskKey(uv, d);
+    float b = bayer8(gl_FragCoord.xy / max(1.0, 2.0 * uPixelRatio));
+    float amtIn = maskAmount(key, uIn);
+    float shown = step(b, amtIn) * (1.0 - step(b, maskAmount(key, uOut)));
+    // pixels still inside the band glow a little as they settle
+    float hot = shown * (1.0 - clamp(amtIn, 0.0, 1.0));
 
-    float edgeT = uv.y * 0.9 + snoise(vec3(uv * vec2(5.0, 16.0), 0.0)) * 0.06 + 0.05;
-    float thr = uReveal * 1.12;
-    float shown = smoothstep(edgeT - 0.006, edgeT + 0.006, thr);
-    float scan = smoothstep(0.018, 0.0, abs(edgeT - thr)) * step(0.001, uReveal) * step(uReveal, 0.999);
-
-    vec3 fill = vec3(l);
-    vec3 wire = vec3(edge);
-    vec3 c = max(fill * uFill, wire * uWire * 0.85);
-    float A = max(a * uFill, edge * uWire);
-    c = c * shown + vec3(1.0) * scan * a;
-    A = A * shown + scan * a;
-    A *= uOpacity;
-    gl_FragColor = vec4(c * uOpacity, A);
+    l = max(l, (0.22 + d * 0.55) * uLift);
+    vec3 c = vec3(l) + hot * 0.22;
+    float A = a * shown * uOpacity;
+    gl_FragColor = vec4(c * A, A);
   }
 `;
 

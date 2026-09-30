@@ -69,8 +69,18 @@ function makePoints(src, step, uniformsCommon) {
       uCell: { value: new THREE.Vector2(1 / cols, 1 / rows) },
       uDepth: { value: 0.9 },
       uForm: { value: 1 },
+      uKnot: { value: 0 },
+      uKnotPos: { value: new THREE.Vector3() },
+      uKnotRot: { value: new THREE.Vector3(0.9, 0, 0.24) },
+      uFlow: { value: 0 },
+      uRingPos: { value: new THREE.Vector3() },
+      uTilt: { value: 1 },
+      uRingR: { value: new THREE.Vector2(0.7, 0.15) },
+      uSpin: { value: 0 },
+      uSweep: { value: -9 },
+      uRingAlpha: { value: 0 },
+      uMaskOut: { value: 0 },
       uScatter: { value: 0 },
-      uDissolve: { value: 0 },
       uPointSize: { value: 1.9 },
       uMouseForce: { value: 0 },
       uOpacity: { value: 1 },
@@ -93,12 +103,12 @@ function makePlane(src, uniformsCommon) {
     uniforms: {
       ...uniformsCommon,
       uTex: { value: src.texture },
-      uTexel: { value: new THREE.Vector2(1 / src.w, 1 / src.h) },
+      uPixelRatio: uniformsCommon.uPixelRatio,
       uOpacity: { value: 0 },
-      uWire: { value: 0 },
-      uFill: { value: 1 },
-      uReveal: { value: 1 },
+      uIn: { value: 1 },
+      uOut: { value: 0 },
       uExposure: { value: 1.15 },
+      uLift: { value: 0 },
     },
   });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(FIG_H * aspect, FIG_H), mat);
@@ -132,17 +142,14 @@ export class Stage {
       uMouse: { value: new THREE.Vector3(9, 9, 0) },
     };
     const step = mobile ? 3 : 2;
-    this.points = {
-      tex: makePoints(sources.tex, step, this.common),
-      grip: makePoints(sources.grip, step, this.common),
-    };
+    this.points = { tex: makePoints(sources.tex, step, this.common) };
     this.planes = {
       clay: makePlane(sources.clay, this.common),
       tex: makePlane(sources.tex, this.common),
       grip: makePlane(sources.grip, this.common),
     };
     // draw order: clay under the material reveal, rig on top, particles last
-    [this.planes.clay, this.planes.tex, this.planes.grip, this.points.tex, this.points.grip].forEach((o, i) => {
+    [this.planes.clay, this.planes.tex, this.planes.grip, this.points.tex].forEach((o, i) => {
       o.renderOrder = i;
       this.group.add(o);
     });
@@ -216,33 +223,42 @@ export class Stage {
     this.camera.lookAt(s.offsetX * 0.15, 0, 0);
 
     const P = this.points, L = this.planes;
-    const pt = P.tex.material.uniforms, pg = P.grip.material.uniforms;
+    const pt = P.tex.material.uniforms;
     pt.uOpacity.value = s.texPts;
     pt.uForm.value = s.form;
+    pt.uKnot.value = s.knot;
+    pt.uKnotPos.value.set(0, s.knotY, 0);
+    pt.uKnotRot.value.set(s.knotTilt, s.knotSpin, s.knotScale);
+    pt.uFlow.value = s.flow;
+    pt.uRingPos.value.set(0, s.ringY, 0);
+    pt.uTilt.value = s.tilt;
+    pt.uRingR.value.set(s.ringR, s.ringr);
+    pt.uSpin.value = s.spin;
+    pt.uSweep.value = s.sweep;
+    pt.uRingAlpha.value = s.ringAlpha;
+    pt.uMaskOut.value = s.ptsOut;
     pt.uScatter.value = s.scatter;
     pt.uMouseForce.value = s.mouseForce;
     pt.uDepth.value = s.depth;
-    pg.uOpacity.value = s.gripPts;
-    pg.uDissolve.value = s.dissolve;
-    pg.uScatter.value = s.gripScatter;
-    pg.uMouseForce.value = s.mouseForce * 0.6;
     P.tex.visible = s.texPts > 0.001;
-    P.grip.visible = s.gripPts > 0.001;
 
-    const lc = L.clay.material.uniforms, lt = L.tex.material.uniforms, lg = L.grip.material.uniforms;
-    lc.uOpacity.value = s.clay;
-    lc.uWire.value = s.clayWire;
-    lc.uFill.value = s.clayFill;
-    lt.uOpacity.value = s.texPlane;
-    lt.uReveal.value = s.texReveal;
-    lg.uOpacity.value = s.gripPlane;
-    for (const k of ['clay', 'tex', 'grip']) L[k].visible = L[k].material.uniforms.uOpacity.value > 0.001;
+    const set = (m, o, i, u) => {
+      const U = m.material.uniforms;
+      U.uOpacity.value = o;
+      U.uIn.value = i;
+      U.uOut.value = u;
+      m.visible = o > 0.001 && i > 0 && u < 1;
+    };
+    set(L.clay, s.clay, s.clayIn, s.clayOut);
+    set(L.tex, s.texPlane, s.texIn, s.texOut);
+    set(L.grip, s.gripPlane, 1, s.gripOut);
+    L.grip.material.uniforms.uLift.value = s.gripLift ?? 0;
 
     // upload only the video frames that are on screen
     const need = {
       tex: P.tex.visible || L.tex.visible,
       clay: L.clay.visible,
-      grip: P.grip.visible || L.grip.visible,
+      grip: L.grip.visible,
     };
     for (const k in need) {
       const src = this.sources[k];

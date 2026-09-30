@@ -198,6 +198,24 @@ function setY(el, pct) {
   el.style.transform = `translate3d(0, ${pct}%, 0)`;
 }
 
+// Knot -> scanning ring. B: 0 = hero knot, 0.2 = untied into a halo above the head, 1 = figure built.
+function ring(s, B, t) {
+  const b = clamp((B - 0.2) / 0.8);
+  const sweep = B < 0.2 ? 1.6 : lerp(1.38, -1.62, b);
+  s.knot = ss(0.0, 0.2, B);
+  s.knotY = 0.02;
+  s.knotTilt = 1.0 + Math.sin(t * 0.21) * 0.32;
+  s.knotSpin = t * 0.22;
+  s.knotScale = 0.3;
+  s.flow = t;
+  s.sweep = sweep;
+  s.ringY = B < 0.2 ? 1.38 : Math.max(sweep, -1.3);
+  s.tilt = 0.3;
+  s.ringR = 0.6;
+  s.ringr = 0.03;
+  s.ringAlpha = 1 - ss(0.88, 1.0, B);
+}
+
 // Compute everything for time t (seconds). Returns GL state + desired video times.
 function update(t) {
   const dt = clamp(t - T.lastT, 0, 0.1);
@@ -282,71 +300,74 @@ function update(t) {
     time: t,
     offsetX: 0, offsetY: -0.02, scale: 1, rotY: 0,
     camX: nx * 0.16 * pointer.force, camY: ny * 0.08 * pointer.force,
-    texPts: 0, form: 1, scatter: 0, depth: 0.9, mouseForce: 0,
-    gripPts: 0, dissolve: 0, gripScatter: 0,
-    clay: 0, clayWire: 0, clayFill: 0,
-    texPlane: 0, texReveal: 0, gripPlane: 0,
+    texPts: 0, form: 1, scatter: 0.006, depth: 0.9, mouseForce: 0, ptsOut: 0,
+    knot: 1, knotY: 0, knotTilt: 1, knotSpin: 0, knotScale: 0.235, flow: 0,
+    ringY: 0, tilt: 1, ringR: 0.7, ringr: 0.15, spin: 0, sweep: -9, ringAlpha: 0,
+    clay: 0, clayIn: 1, clayOut: 0,
+    texPlane: 0, texIn: 1, texOut: 0,
+    gripPlane: 0, gripOut: 0,
     ascii: 0, asciiGain: 1.25, canvasOpacity: 1,
   };
-  const video = { tex: null, clay: null, grip: null };
+  const video = { grip: 0 };
+  s.spin = t * 0.35;
 
   if (S <= 0) {
-    // hero + process
+    // hero: a torus of points. Scrolling turns it into a scanning ring that builds the figure.
+    const pr = sections.process.getBoundingClientRect();
+    const buildEnd = pr.top + scrollY + 0.13 * (pr.height - vh);
+    const B = clamp(scrollY / buildEnd);
     s.texPts = 1;
-    s.form = REDUCED ? 1 : introT < 0 ? 0 : easeInOut(introT / 2.8);
-    s.mouseForce = pointer.force * (1 - ss(0.0, 0.1, P));
-    // 01 prompt: the figure breaks into a cloud, then condenses again
-    s.scatter = 0.008 + ss(-0.02, 0.07, P) * 1.1 * (1 - ss(0.115, 0.2, P));
+    s.form = REDUCED ? 1 : introT < 0 ? 0 : easeInOut(introT / 2.4);
+    ring(s, B, t);
+    s.spin += B * 2.5;
+    s.mouseForce = pointer.force * (1 - ss(0.0, 0.3, B));
     // 02 point cloud: swing to show depth
     const swing = ss(0.16, 0.34, P);
     s.rotY = Math.sin(swing * Math.PI * 2) * 0.5;
     s.depth = 0.9 + Math.sin(swing * Math.PI) * 0.9;
-    // 03 geometry: wireframe, then clay fill
-    const toMesh = ss(0.33, 0.375, P);
-    s.texPts *= 1 - toMesh;
-    s.clay = toMesh * (1 - ss(0.68, 0.71, P));
-    s.clayWire = toMesh * (1 - ss(0.46, 0.53, P) * 0.9);
-    s.clayFill = ss(0.41, 0.5, P);
-    // 04 material: reveal bottom-up
-    s.texPlane = ss(0.54, 0.555, P) * (1 - (P >= 0.745 ? 1 : 0));
-    s.texReveal = ss(0.56, 0.69, P);
+    // 03 geometry: points dissolve straight into clay
+    const geo = ss(0.35, 0.45, P);
+    s.ptsOut = geo;
+    if (P >= 0.46) s.texPts = 0;
+    s.clay = P > 0.34 && P < 0.68 ? 1 : 0;
+    s.clayIn = geo;
+    // 04 material: same dissolve, clay -> texture
+    s.texPlane = P > 0.54 && P < 0.745 ? 1 : 0;
+    s.texIn = ss(0.55, 0.66, P);
     // 05 rig: glitch through ASCII into the T-pose, then scrub the motion
     s.ascii = ss(0.712, 0.745, P) * (1 - ss(0.752, 0.79, P));
     s.gripPlane = P >= 0.745 ? 1 : 0;
     video.grip = ss(0.775, 0.975, P) * GRIP_MOTION_END;
   } else if (S < 1) {
-    // statement: the held pose turns to type and blows away
-    s.gripPlane = 1 - ss(0.0, 0.05, S);
-    s.gripPts = ss(0.0, 0.05, S) * (1 - ss(0.86, 0.98, S));
-    s.ascii = ss(0.06, 0.34, S);
-    s.dissolve = ss(0.12, 0.9, S);
-    s.asciiGain = 1.9;
-    s.gripScatter = ss(0.12, 0.8, S) * 0.3;
-    s.mouseForce = pointer.force * 0.6;
+    // statement: the held pose turns to type, then dissolves the same way things arrived
+    s.gripPlane = 1;
+    s.ascii = ss(0.03, 0.28, S);
+    s.gripLift = ss(0.0, 0.2, S);
+    s.asciiGain = 1.5;
+    s.gripOut = ss(0.36, 0.86, S);
     video.grip = GRIP_HOLD;
   } else {
     const jr = sections.join.getBoundingClientRect();
     const jIn = clamp((vh - jr.top) / vh);
     if (jIn <= 0.15) {
-      // models: the figure re-forms small, to the right, as type
+      // models: the clay figure resolves small, to the right, as type
       const r = sections.models.getBoundingClientRect();
       const mIn = clamp((vh - r.top) / (vh * 0.9));
       const lt = modelsList.getBoundingClientRect().top;
-      const out = ss(vh * 0.8, vh * 0.3, lt);
-      s.texPts = ss(0.3, 0.7, mIn) * (1 - out);
-      s.form = ss(0.3, 1.0, mIn);
+      s.clay = 1;
+      s.clayIn = ss(0.3, 0.85, mIn);
+      s.clayOut = ss(vh * 0.8, vh * 0.3, lt);
       s.ascii = 1;
-      s.asciiGain = 1.7;
+      s.asciiGain = 1.15;
       s.scale = 0.78;
       s.offsetX = stage ? stage.worldHalfW * 0.5 : 1;
-      s.offsetY = 0.08 - (1 - mIn) * 0.3 + out * 0.4;
-      s.mouseForce = pointer.force * 0.8;
+      s.offsetY = 0.04;
     } else {
-      // finale: the figure returns, whole, where it started
-      const k = ss(0.15, 1.0, jIn);
-      s.texPts = k;
-      s.form = k;
-      s.mouseForce = pointer.force * k;
+      // finale: the ring gathers again and rebuilds the figure where it started
+      s.texPts = 1;
+      s.form = ss(0.12, 0.38, jIn);
+      ring(s, ss(0.42, 0.98, jIn), t);
+      s.mouseForce = pointer.force * ss(0.9, 1, jIn);
     }
     video.grip = GRIP_HOLD;
   }
@@ -360,7 +381,6 @@ function update(t) {
     stage.pointerToWorld(nx, ny, stage.common.uMouse.value);
   }
 
-  if (video.grip === null) video.grip = 0;
   return { s, video };
 }
 
