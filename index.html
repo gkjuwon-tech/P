@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PLINTH — Say it. Hold it.</title>
+    <meta name="description" content="Text and image to production-ready 3D. Every leading model, in one studio." />
+    <meta name="theme-color" content="#050505" />
+    <link rel="preload" as="image" href="./video/hero-turntable/hero-turntable_poster.webp" />
+    <script type="module" crossorigin src="./assets/index-Dz2NVQTn.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-wX2EveRe.css">
+  </head>
+  <body>
+    <div class="loader" aria-hidden="true">
+      <span class="loader__brand">PLINTH</span>
+      <span class="loader__count"><span data-count>000</span></span>
+      <span class="loader__bar"><i></i></span>
+    </div>
+
+    <canvas class="gl" aria-hidden="true"></canvas>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="cursor" aria-hidden="true"></div>
+
+    <header class="nav">
+      <a class="nav__brand" href="#top" data-link>PLINTH</a>
+      <a class="nav__cta" href="#join" data-link>Join the waitlist <span>→</span></a>
+    </header>
+
+    <main id="top">
+      <!-- 01 HERO -->
+      <section class="hero" data-section="hero">
+        <h1 class="hero__title big">
+          <span class="line"><span data-r="0.15">Say it.</span></span>
+          <span class="line line--end"><span data-r="0.3">Hold it.</span></span>
+        </h1>
+        <img class="hero__poster" src="./video/hero-turntable/hero-turntable_poster.webp" alt="" />
+        <div class="hero__foot">
+          <p class="hero__prompt" data-f="0.7"><span data-type>a faceless figure in a black suit</span><i class="caret"></i></p>
+        </div>
+      </section>
+
+      <!-- 02 PROCESS (pinned) -->
+      <section class="process" id="process" data-section="process">
+        <div class="process__sticky">
+
+          <p class="process__prompt" aria-hidden="true">
+            <span class="line"><span data-pp="0">“a faceless figure</span></span>
+            <span class="line"><span data-pp="1">in a black suit”</span></span>
+          </p>
+
+          <div class="process__stages">
+            <div class="stage" data-stage="0"><h2><span>Prompt</span></h2></div>
+            <div class="stage" data-stage="1"><h2><span>Point cloud</span></h2></div>
+            <div class="stage" data-stage="2"><h2><span>Geometry</span></h2></div>
+            <div class="stage" data-stage="3"><h2><span>Material</span></h2></div>
+            <div class="stage" data-stage="4"><h2><span>Rig &amp; motion</span></h2></div>
+          </div>
+
+          <div class="process__rail" aria-hidden="true"><i class="process__fill"></i></div>
+        </div>
+      </section>
+
+      <!-- 03 STATEMENT (pinned) -->
+      <section class="statement" data-section="statement">
+        <div class="statement__sticky">
+          <h2 class="statement__title">
+            <span class="line"><span data-st="0">Too many ideas.</span></span>
+            <span class="line"><span data-st="1">One studio.</span></span>
+          </h2>
+        </div>
+      </section>
+
+      <!-- 04 MODELS -->
+      <section class="models" id="models" data-section="models">
+        <h2 class="models__title">
+          <span class="line"><span data-r="0.05">Every leading model.</span></span>
+          <span class="line"><span data-r="0.15">One prompt.</span></span>
+        </h2>
+
+        <ol class="models__list">
+          <li data-f="0.00"><span class="n">Hunyuan3D 3</span><span class="d">Textures and PBR</span></li>
+          <li data-f="0.05"><span class="n">Seed3D 2</span><span class="d">Geometry fidelity</span></li>
+          <li data-f="0.10"><span class="n">Rodin Gen-2</span><span class="d">Film-grade detail</span></li>
+          <li data-f="0.15"><span class="n">Tripo 3</span><span class="d">Clean topology, fast</span></li>
+          <li data-f="0.20"><span class="n">TRELLIS.2</span><span class="d">Open weights</span></li>
+          <li data-f="0.25"><span class="n">Meshy 6</span><span class="d">Rig-ready characters</span></li>
+        </ol>
+      </section>
+
+      <!-- 05 JOIN -->
+      <section class="join" id="join" data-section="join">
+        <h2 class="join__title big">
+          <span class="line"><span data-r="0.05">Start with</span></span>
+          <span class="line line--end"><span data-r="0.2">a sentence.</span></span>
+        </h2>
+        <form class="join__form" data-f="0.45" novalidate>
+          <label class="sr" for="email">Email address</label>
+          <input id="email" name="email" type="email" placeholder="your email" autocomplete="email" required />
+          <button type="submit">Join the waitlist</button>
+          <p class="join__msg" role="status" aria-live="polite"></p>
+        </form>
+        <footer class="foot">
+          <span>PLINTH © 2026</span>
+          <a href="#top" data-link>Back to top</a>
+        </footer>
+      </section>
+    </main>
+
+  </body>
+</html>
