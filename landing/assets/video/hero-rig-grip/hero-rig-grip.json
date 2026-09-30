@@ -1,0 +1,19 @@
+{
+  "name": "hero-rig-grip",
+  "fps": 24,
+  "frames": 276,
+  "duration": 11.5,
+  "width": 704,
+  "height": 720,
+  "crop_x_in_source": [
+    288,
+    992
+  ],
+  "source_frame": [
+    1280,
+    720
+  ],
+  "loop": false,
+  "stacked_layout": "rows: [colour(premultiplied), alpha]",
+  "packed_layout": "rows: [colour(premultiplied), alpha, depth(white=near)]"
+}
