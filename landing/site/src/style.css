@@ -105,7 +105,7 @@ main { position: relative; }
 
 /* ---------- process ---------- */
 .process { position: relative; z-index: 2; height: 640vh; }
-.process__sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+.process__sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 .process__prompt {
   position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center;
   font-size: clamp(34px, 4.6vw, 88px); line-height: 1.0; letter-spacing: -0.045em; font-weight: 500;
@@ -121,7 +121,7 @@ main { position: relative; }
 
 /* ---------- statement ---------- */
 .statement { position: relative; height: 250vh; }
-.statement__sticky { position: sticky; top: 0; height: 100vh; display: grid; place-items: center; }
+.statement__sticky { position: sticky; top: 0; height: 100vh; height: 100svh; display: grid; place-items: center; }
 .statement__title {
   position: relative; z-index: 0; text-align: center;
   font-weight: 500; font-size: clamp(56px, 10.4vw, 210px); line-height: 0.88; letter-spacing: -0.058em;
@@ -173,13 +173,43 @@ main { position: relative; }
 }
 .foot a:hover { color: var(--fg); }
 
-/* ---------- small screens ---------- */
+/* ---------- phones ---------- */
 @media (max-width: 760px) {
-  .big { font-size: 21vw; }
-  .hero__title, .join__title { top: 16vh; }
+  :root { --pad: 20px; }
+  body { font-size: 14px; }
+  .nav { font-size: 14px; padding-top: calc(env(safe-area-inset-top) + 16px); }
+
+  /* hero + finale: one line at the top, one at the bottom, the figure between them */
+  .hero, .join { height: 100svh; min-height: 560px; }
+  .hero__title, .join__title {
+    top: 12svh; bottom: 19svh; display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .hero__title { font-size: 25vw; }
+  .join__title { font-size: 17.6vw; bottom: 27svh; }
+  .hero__foot { bottom: calc(env(safe-area-inset-bottom) + 26px); }
+  .hero__prompt { font-size: 14px; }
+
+  .process__sticky, .statement__sticky { height: 100svh; }
+  .process__prompt { font-size: 9.4vw; line-height: 1.04; }
+  .stage { bottom: calc(env(safe-area-inset-bottom) + 24px); }
+  .stage h2 { font-size: 13.5vw; }
   .process__rail { display: none; }
-  .models__list li { flex-direction: column; gap: 6px; }
-  .join__form { flex-wrap: wrap; }
+
+  .statement__title { font-size: 12.4vw; }
+
+  .models { padding: 18svh var(--pad) 14svh; }
+  .models__title { font-size: 9.6vw; }
+  .models__list { margin-top: 9svh; }
+  .models__list li { flex-direction: column; gap: 6px; padding: 20px 0 18px; }
+  .models__list .n { font-size: 8.4vw; }
+  .models__list .d { font-size: 14px; }
+
+  .join__form {
+    width: auto; left: var(--pad); right: var(--pad); gap: 14px; font-size: 15px;
+    bottom: calc(env(safe-area-inset-bottom) + 76px);
+  }
+  .join__msg { font-size: 13px; }
+  .foot { bottom: calc(env(safe-area-inset-bottom) + 20px); font-size: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

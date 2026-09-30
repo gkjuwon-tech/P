@@ -105,6 +105,7 @@ function makePlane(src, uniformsCommon) {
       uTex: { value: src.texture },
       uPixelRatio: uniformsCommon.uPixelRatio,
       uOpacity: { value: 0 },
+      uTexel: { value: new THREE.Vector2(1 / src.w, 1 / src.h) },
       uIn: { value: 1 },
       uOut: { value: 0 },
       uExposure: { value: 1.15 },
@@ -117,7 +118,7 @@ function makePlane(src, uniformsCommon) {
 }
 
 export class Stage {
-  constructor(canvas, sources, { mobile = false, pixelRatio = 1, preserve = false } = {}) {
+  constructor(canvas, sources, { pixelRatio = 1, preserve = false } = {}) {
     this.canvas = canvas;
     this.sources = sources; // { tex, clay, grip } -> { video, w, h }
     this.pixelRatio = pixelRatio;
@@ -141,7 +142,7 @@ export class Stage {
       uPixelRatio: { value: pixelRatio },
       uMouse: { value: new THREE.Vector3(9, 9, 0) },
     };
-    const step = mobile ? 3 : 2;
+    const step = 2;
     this.points = { tex: makePoints(sources.tex, step, this.common) };
     this.planes = {
       clay: makePlane(sources.clay, this.common),
@@ -262,9 +263,12 @@ export class Stage {
     };
     for (const k in need) {
       const src = this.sources[k];
-      if (need[k] && src.dirty && src.video.readyState >= 2) {
+      const v = src.video;
+      // re-upload when the frame changed (or a capture seek landed); never mid-seek
+      if (need[k] && v.readyState >= 2 && !v.seeking && (src.dirty || v.currentTime !== src.lastUpload)) {
         src.texture.needsUpdate = true;
-        src.dirty = !('requestVideoFrameCallback' in src.video); // otherwise set again on the next decoded frame
+        src.lastUpload = v.currentTime;
+        src.dirty = false;
       }
     }
 

@@ -6,6 +6,8 @@ import { Stage } from './gl.js';
 const CAPTURE = new URLSearchParams(location.search).has('capture');
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MOBILE = matchMedia('(max-width: 760px)').matches;
+// Safari (and Chrome with proprietary codecs) gets the higher-quality H.264 file first
+const H264 = document.createElement('video').canPlayType('video/mp4; codecs="avc1.640028"') === 'probably';
 const FPS = 24;
 
 // Video sources (landing/assets/video). Durations in frames at 24 fps.
@@ -52,7 +54,9 @@ for (const [key, s] of Object.entries(SOURCES)) {
   v.height = s.h * 3;
   v.setAttribute('muted', '');
   v.setAttribute('playsinline', '');
-  for (const [ext, type] of [['webm', 'video/webm; codecs="vp9"'], ['mp4', 'video/mp4']]) {
+  const kinds = [['webm', 'video/webm; codecs="vp9"'], ['mp4', 'video/mp4']];
+  if (H264) kinds.reverse();
+  for (const [ext, type] of kinds) {
     const src = document.createElement('source');
     src.src = `./video/${s.base}/${s.base}_packed.${ext}`;
     src.type = type;
@@ -62,19 +66,35 @@ for (const [key, s] of Object.entries(SOURCES)) {
   s.video = v;
   s.duration = s.frames / FPS;
   s.dirty = true;
-  if ('requestVideoFrameCallback' in v && !CAPTURE) {
-    const onFrame = () => {
-      s.dirty = true;
-      v.requestVideoFrameCallback(onFrame);
-    };
-    v.requestVideoFrameCallback(onFrame);
+  s.stall = 0;
+  s.manual = false; // true when the browser will not play it (e.g. iOS Low Power Mode): we step it by seeking
+}
+
+// iOS only fetches video data once play() is called; start everything muted right away,
+// and again on the first touch in case autoplay was refused.
+function kick() {
+  for (const [key, s] of Object.entries(SOURCES)) {
+    const v = s.video;
+    const p = v.play();
+    if (key === 'grip') p?.then(() => v.pause()).catch(() => {});
+    else p?.catch(() => {});
   }
+}
+if (!CAPTURE) {
+  kick();
+  const unlock = () => {
+    kick();
+    removeEventListener('touchstart', unlock);
+    removeEventListener('pointerdown', unlock);
+  };
+  addEventListener('touchstart', unlock, { passive: true });
+  addEventListener('pointerdown', unlock);
 }
 
 const ready = (v) =>
   new Promise((res) => {
-    if (v.readyState >= 3) return res();
-    v.addEventListener('canplaythrough', res, { once: true });
+    if (v.readyState >= 2) return res();
+    v.addEventListener('loadeddata', res, { once: true });
     v.addEventListener('error', res, { once: true });
     setTimeout(res, 15000);
   });
@@ -91,8 +111,8 @@ const canvas = $('.gl');
 let stage = null;
 function initStage() {
   try {
-    const pr = CAPTURE ? 1 : Math.min(devicePixelRatio || 1, MOBILE ? 1.5 : 2);
-    stage = new Stage(canvas, SOURCES, { mobile: MOBILE, pixelRatio: pr, preserve: CAPTURE });
+    const pr = CAPTURE ? 1 : Math.min(devicePixelRatio || 1, 2);
+    stage = new Stage(canvas, SOURCES, { pixelRatio: pr, preserve: CAPTURE });
     stage.resize(innerWidth, innerHeight);
   } catch (e) {
     console.warn('WebGL unavailable', e);
@@ -207,12 +227,13 @@ function ring(s, B, t) {
   s.knotY = 0.02;
   s.knotTilt = 1.0 + Math.sin(t * 0.21) * 0.32;
   s.knotSpin = t * 0.22;
-  s.knotScale = 0.3;
+  const halfW = stage ? stage.worldHalfW : 1.4;
+  s.knotScale = Math.min(0.3, (halfW * 0.82) / 3.0);
   s.flow = t;
   s.sweep = sweep;
   s.ringY = B < 0.2 ? 1.38 : Math.max(sweep, -1.3);
   s.tilt = 0; // flat: perspective alone gives the right angle above and below eye level
-  s.ringR = 0.6;
+  s.ringR = Math.min(0.6, halfW * 0.8);
   s.ringr = 0.03;
   s.ringAlpha = 0.55 * (1 - ss(0.88, 1.0, B));
 }
@@ -307,6 +328,12 @@ function update(t) {
   const video = { grip: 0 };
   s.spin = t * 0.35;
 
+  // phones (portrait): lift the figure clear of the stage titles
+  if (MOBILE) {
+    s.scale = 0.86;
+    s.offsetY = 0.12;
+  }
+
   if (S <= 0) {
     // hero: a torus of points. Scrolling turns it into a scanning ring that builds the figure.
     const pr = sections.process.getBoundingClientRect();
@@ -350,7 +377,7 @@ function update(t) {
       const r = sections.models.getBoundingClientRect();
       const mIn = clamp((vh - r.top) / (vh * 0.9));
       const lt = modelsList.getBoundingClientRect().top;
-      s.clay = 1;
+      s.clay = MOBILE ? 0 : 1; // no room beside the title on a phone
       s.clayIn = ss(0.3, 0.85, mIn);
       s.clayOut = ss(vh * 0.8, vh * 0.3, lt);
       s.ascii = 1;
@@ -383,19 +410,39 @@ function update(t) {
 // ---------- video time control ----------
 const frameTime = (src, time) => (Math.floor(clamp(time, 0, src.duration - 1e-3) * FPS) + 0.5) / FPS;
 
-function driveVideosLive(video) {
-  const tex = SOURCES.tex.video, clay = SOURCES.clay.video, grip = SOURCES.grip.video;
-  if (tex.paused) tex.play().catch(() => {});
-  if (clay.paused) clay.play().catch(() => {});
+function driveVideosLive(video, t, dt) {
+  const T = SOURCES.tex, C = SOURCES.clay, G = SOURCES.grip;
+  // detect a video that is not advancing on its own and fall back to stepping it
+  for (const s of [T, C]) {
+    const v = s.video;
+    if (s.manual) continue;
+    if (v.paused) v.play().catch(() => {});
+    s.stall = v.paused || v.currentTime === s.lastCT ? s.stall + dt : 0;
+    s.lastCT = v.currentTime;
+    // refused to play (paused), or claims to play with data but is not advancing
+    if ((v.paused && s.stall > 0.6) || (s.stall > 2 && v.readyState >= 3)) {
+      s.manual = true;
+      v.pause();
+    }
+  }
+  const texTime = T.manual ? t % T.duration : T.video.currentTime;
+  if (T.manual && !T.video.seeking) {
+    const ft = frameTime(T, texTime);
+    if (Math.abs(T.video.currentTime - ft) > 0.5 / FPS) T.video.currentTime = ft;
+  }
   // keep the clay pass on the same turn as the textured one
-  clay.playbackRate = SOURCES.clay.duration / SOURCES.tex.duration;
-  const want = (tex.currentTime / SOURCES.tex.duration) * SOURCES.clay.duration;
-  if (!clay.seeking && Math.abs(clay.currentTime - want) > 0.12) clay.currentTime = want;
+  const want = (texTime / T.duration) * C.duration;
+  if (C.manual) {
+    const ft = frameTime(C, want);
+    if (!C.video.seeking && Math.abs(C.video.currentTime - ft) > 0.5 / FPS) C.video.currentTime = ft;
+  } else {
+    C.video.playbackRate = C.duration / T.duration;
+    if (!C.video.seeking && Math.abs(C.video.currentTime - want) > 0.15) C.video.currentTime = want;
+  }
   // scrub the rig clip
-  const gs = SOURCES.grip;
-  gs.smooth = gs.smooth === undefined ? video.grip : lerp(gs.smooth, video.grip, 0.3);
-  const g = frameTime(gs, gs.smooth);
-  if (!grip.seeking && Math.abs(grip.currentTime - g) > 0.5 / FPS) grip.currentTime = g;
+  G.smooth = G.smooth === undefined ? video.grip : lerp(G.smooth, video.grip, 0.3);
+  const g = frameTime(G, G.smooth);
+  if (!G.video.seeking && Math.abs(G.video.currentTime - g) > 0.5 / FPS) G.video.currentTime = g;
 }
 
 function seek(src, time) {
@@ -427,12 +474,15 @@ loadingDone.then(() => {
 
 if (!CAPTURE) {
   const t0 = performance.now();
+  let lastLoopT = 0;
   const loop = (now) => {
     requestAnimationFrame(loop);
     lenis?.raf(now);
     const t = (now - t0) / 1000;
+    const dt = t - lastLoopT;
+    lastLoopT = t;
     const { s, video } = update(t);
-    driveVideosLive(video);
+    driveVideosLive(video, t, clamp(dt, 0, 0.1));
     stage?.render(s);
   };
   requestAnimationFrame(loop);

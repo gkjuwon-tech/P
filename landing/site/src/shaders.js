@@ -55,9 +55,9 @@ const noise = /* glsl */ `
 // Shared transition: a 1-bit ordered-dither dissolve whose order follows the depth map
 // (nearest surfaces resolve first), broken up by low-frequency noise.
 const dissolve = /* glsl */ `
-  float bayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-  float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
-  float bayer8(vec2 a) { return bayer4(0.5 * a) * 0.25 + bayer2(a); }
+  float bayer2(vec2 a) { a = mod(floor(a), 2.0); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+  float bayer4(vec2 a) { a = mod(floor(a), 4.0); return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+  float bayer8(vec2 a) { a = mod(floor(a), 8.0); return bayer4(0.5 * a) * 0.25 + bayer2(a); }
   float maskKey(vec2 uv, float d) {
     return clamp(0.78 - d * 0.7 + snoise(vec3(uv * vec2(7.0, 16.0), 3.1)) * 0.07, 0.0, 1.0);
   }
@@ -217,6 +217,7 @@ export const planeFrag = /* glsl */ `
   uniform float uExposure;
   uniform float uLift;         // lift dark surfaces by depth (so they survive the ASCII pass)
   uniform float uPixelRatio;
+  uniform vec2 uTexel;
   varying vec2 vUv;
   ${packed}
   ${noise}
@@ -225,7 +226,10 @@ export const planeFrag = /* glsl */ `
     vec2 uv = vUv;
     float a = packedAlpha(uTex, uv);
     float d = packedDepth(uTex, uv);
-    float l = luma(packedColor(uTex, uv)) * uExposure;
+    float l0 = luma(packedColor(uTex, uv));
+    float nb = luma(packedColor(uTex, uv + vec2(uTexel.x, 0.0))) + luma(packedColor(uTex, uv - vec2(uTexel.x, 0.0)))
+             + luma(packedColor(uTex, uv + vec2(0.0, uTexel.y))) + luma(packedColor(uTex, uv - vec2(0.0, uTexel.y)));
+    float l = max(0.0, l0 + (l0 - nb * 0.25) * 0.7) * uExposure;
 
     float key = maskKey(uv, d);
     float b = bayer8(gl_FragCoord.xy / max(1.0, 2.0 * uPixelRatio));
