@@ -1,0 +1,24 @@
+{
+  "name": "plinth-landing",
+  "version": "1.0.0",
+  "description": "Landing page for PLINTH - text/image to 3D studio",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "record": "node tools/record.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1",
+    "vite": "^6.4.3"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter-tight": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "lenis": "^1.3.26",
+    "three": "^0.186.1"
+  },
+  "private": true,
+  "type": "module"
+}

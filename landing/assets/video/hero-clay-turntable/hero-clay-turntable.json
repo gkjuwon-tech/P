@@ -1,0 +1,19 @@
+{
+  "name": "hero-clay-turntable",
+  "fps": 24,
+  "frames": 222,
+  "duration": 9.25,
+  "width": 288,
+  "height": 720,
+  "crop_x_in_source": [
+    496,
+    784
+  ],
+  "source_frame": [
+    1280,
+    720
+  ],
+  "loop": true,
+  "stacked_layout": "rows: [colour(premultiplied), alpha]",
+  "packed_layout": "rows: [colour(premultiplied), alpha, depth(white=near)]"
+}
