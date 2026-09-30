@@ -2,13 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script>
+      // iPhone "Request Desktop Website" sends a Mac user agent but keeps width=device-width,
+      // so lay the page out at desktop width instead.
+      (function () {
+        var mac = /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+        if (mac && Math.min(screen.width, screen.height) < 600) {
+          document.querySelector('meta[name=viewport]').setAttribute('content', 'width=1280');
+        }
+      })();
+    </script>
     <title>PLINTH — Say it. Hold it.</title>
     <meta name="description" content="Text and image to production-ready 3D. Every leading model, in one studio." />
     <meta name="theme-color" content="#050505" />
     <link rel="preload" as="image" href="./video/hero-turntable/hero-turntable_poster.webp" />
-    <script type="module" crossorigin src="./assets/index-Dz2NVQTn.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-wX2EveRe.css">
+    <script type="module" crossorigin src="./assets/index-gFhsUBYo.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CXG7Ocp4.css">
   </head>
   <body>
     <div class="loader" aria-hidden="true">
