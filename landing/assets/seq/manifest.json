@@ -1,0 +1,20 @@
+{
+  "fps": 12,
+  "clips": {
+    "hero-turntable": {
+      "frames": 106,
+      "width": 232,
+      "height": 1728
+    },
+    "hero-clay-turntable": {
+      "frames": 111,
+      "width": 232,
+      "height": 1728
+    },
+    "hero-rig-grip": {
+      "frames": 138,
+      "width": 564,
+      "height": 1728
+    }
+  }
+}

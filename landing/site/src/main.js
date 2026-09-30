@@ -9,12 +9,18 @@ const MOBILE = matchMedia('(max-width: 760px)').matches;
 // Safari (and Chrome with proprietary codecs) gets the higher-quality H.264 file first
 const H264 = document.createElement('video').canPlayType('video/mp4; codecs="avc1.640028"') === 'probably';
 const FPS = 24;
+// iOS will not reliably feed <video> to WebGL (Low Power Mode, in-app browsers without inline
+// playback): use JPEG image sequences there instead (landing/assets/seq, see tools/seq.py).
+const UA = navigator.userAgent;
+const IOS = /iPad|iPhone|iPod/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+const SEQ = !CAPTURE && (IOS || new URLSearchParams(location.search).has('seq'));
+const SEQ_FPS = 12;
 
 // Video sources (landing/assets/video). Durations in frames at 24 fps.
 const SOURCES = {
-  tex: { base: 'hero-turntable', w: 288, h: 720, frames: 211 },
-  clay: { base: 'hero-clay-turntable', w: 288, h: 720, frames: 222 },
-  grip: { base: 'hero-rig-grip', w: 704, h: 720, frames: 276 },
+  tex: { base: 'hero-turntable', w: 288, h: 720, frames: 211, seqFrames: 106 },
+  clay: { base: 'hero-clay-turntable', w: 288, h: 720, frames: 222, seqFrames: 111 },
+  grip: { base: 'hero-rig-grip', w: 704, h: 720, frames: 276, seqFrames: 138 },
 };
 const GRIP_MOTION_END = 252 / FPS; // after this the clip holds still
 const GRIP_HOLD = 270 / FPS;
@@ -37,74 +43,121 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement;
 root.classList.add('is-loading');
 
-// ---------- videos ----------
-const videoHost = document.createElement('div');
-videoHost.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;left:0;top:0';
-document.body.appendChild(videoHost);
+// ---------- media: <video> or image sequence, same interface ----------
+// Each source exposes frame() -> { el, key } for the texture upload (key changes when the picture does).
+let fontsDone = false;
+const fontsReady = document.fonts.ready
+  .then(() => document.fonts.load('500 40px "JetBrains Mono Variable"'))
+  .then(() => (fontsDone = true));
 
-for (const [key, s] of Object.entries(SOURCES)) {
-  const v = document.createElement('video');
-  v.muted = true;
-  v.playsInline = true;
-  v.preload = 'auto';
-  v.crossOrigin = 'anonymous';
-  v.loop = key !== 'grip';
-  // three.js sizes the texture from these attributes, not videoWidth
-  v.width = s.w;
-  v.height = s.h * 3;
-  v.setAttribute('muted', '');
-  v.setAttribute('playsinline', '');
-  const kinds = [['webm', 'video/webm; codecs="vp9"'], ['mp4', 'video/mp4']];
-  if (H264) kinds.reverse();
-  for (const [ext, type] of kinds) {
-    const src = document.createElement('source');
-    src.src = `./video/${s.base}/${s.base}_packed.${ext}`;
-    src.type = type;
-    v.appendChild(src);
+let loadProgress = () => 0;
+let loadingDone;
+
+if (SEQ) {
+  const loadImg = (src, s, i) =>
+    new Promise((res) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        s.ok[i] = true;
+        s.count++;
+        res();
+      };
+      img.onerror = res;
+      img.src = src;
+      s.imgs[i] = img;
+    });
+  const loadSeq = (s, order) => Promise.all(order.map((i) => loadImg(`./seq/${s.base}/${String(i).padStart(3, '0')}.jpg`, s, i)));
+  for (const s of Object.values(SOURCES)) {
+    s.duration = s.frames / FPS;
+    s.imgs = new Array(s.seqFrames);
+    s.ok = new Array(s.seqFrames).fill(false);
+    s.count = 0;
+    s.time = 0;
+    s.frame = () => {
+      const n = s.seqFrames;
+      const want = Math.min(n - 1, Math.floor(s.time * SEQ_FPS)) % n;
+      for (let d = 0; d < n; d++) {
+        const i = (want - d + n) % n; // nearest loaded frame at or before the one we want
+        if (s.ok[i]) return { el: s.imgs[i], key: i };
+      }
+      return null;
+    };
   }
-  videoHost.appendChild(v);
-  s.video = v;
-  s.duration = s.frames / FPS;
-  s.dirty = true;
-  s.stall = 0;
-  s.manual = false; // true when the browser will not play it (e.g. iOS Low Power Mode): we step it by seeking
-}
-
-// iOS only fetches video data once play() is called; start everything muted right away,
-// and again on the first touch in case autoplay was refused.
-function kick() {
-  for (const [key, s] of Object.entries(SOURCES)) {
-    const v = s.video;
-    const p = v.play();
-    if (key === 'grip') p?.then(() => v.pause()).catch(() => {});
-    else p?.catch(() => {});
-  }
-}
-if (!CAPTURE) {
-  kick();
-  const unlock = () => {
-    kick();
-    removeEventListener('touchstart', unlock);
-    removeEventListener('pointerdown', unlock);
-  };
-  addEventListener('touchstart', unlock, { passive: true });
-  addEventListener('pointerdown', unlock);
-}
-
-const ready = (v) =>
-  new Promise((res) => {
-    if (v.readyState >= 2) return res();
-    v.addEventListener('loadeddata', res, { once: true });
-    v.addEventListener('error', res, { once: true });
-    setTimeout(res, 15000);
+  const T = SOURCES.tex, C = SOURCES.clay, G = SOURCES.grip;
+  const all = (s) => [...Array(s.seqFrames).keys()];
+  // hero clip first (the loader waits for it), plus the first frames of the others; the rest stream in after
+  loadingDone = Promise.all([loadSeq(T, all(T)), loadSeq(C, [0]), loadSeq(G, [0]), fontsReady]);
+  loadingDone.then(() => {
+    loadSeq(G, all(G).slice(1));
+    loadSeq(C, all(C).slice(1));
   });
+  loadProgress = () => (T.count / T.seqFrames) * 0.85 + (fontsDone ? 0.15 : 0);
+} else {
+  const videoHost = document.createElement('div');
+  videoHost.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;left:0;top:0';
+  document.body.appendChild(videoHost);
 
-let loaded = 0;
-const loadTotal = 4;
-const loadingDone = Promise.all([
-  ...Object.values(SOURCES).map((s) => ready(s.video).then(() => loaded++)),
-  document.fonts.ready.then(() => document.fonts.load('500 40px "JetBrains Mono Variable"')).then(() => loaded++),
-]);
+  for (const [key, s] of Object.entries(SOURCES)) {
+    const v = document.createElement('video');
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.crossOrigin = 'anonymous';
+    v.loop = key !== 'grip';
+    // three.js sizes the texture from these attributes, not videoWidth
+    v.width = s.w;
+    v.height = s.h * 3;
+    v.setAttribute('muted', '');
+    v.setAttribute('playsinline', '');
+    const kinds = [['webm', 'video/webm; codecs="vp9"'], ['mp4', 'video/mp4']];
+    if (H264) kinds.reverse();
+    for (const [ext, type] of kinds) {
+      const src = document.createElement('source');
+      src.src = `./video/${s.base}/${s.base}_packed.${ext}`;
+      src.type = type;
+      v.appendChild(src);
+    }
+    videoHost.appendChild(v);
+    s.video = v;
+    s.duration = s.frames / FPS;
+    s.stall = 0;
+    s.manual = false; // true when the browser will not play it: we step it by seeking
+    s.frame = () => (v.readyState >= 2 && !v.seeking ? { el: v, key: v.currentTime } : null);
+  }
+
+  // some browsers only fetch video data once play() is called; start everything muted right away,
+  // and again on the first tap in case autoplay was refused.
+  const kick = () => {
+    for (const [key, s] of Object.entries(SOURCES)) {
+      const v = s.video;
+      const pr = v.play();
+      if (key === 'grip') pr?.then(() => v.pause()).catch(() => {});
+      else pr?.catch(() => {});
+    }
+  };
+  if (!CAPTURE) {
+    kick();
+    const unlock = () => {
+      kick();
+      removeEventListener('touchend', unlock);
+      removeEventListener('click', unlock);
+    };
+    addEventListener('touchend', unlock, { passive: true });
+    addEventListener('click', unlock);
+  }
+
+  const ready = (v) =>
+    new Promise((res) => {
+      if (v.readyState >= 2) return res();
+      v.addEventListener('loadeddata', res, { once: true });
+      v.addEventListener('error', res, { once: true });
+      setTimeout(res, 15000);
+    });
+  let n = 0;
+  loadingDone = Promise.all([...Object.values(SOURCES).map((s) => ready(s.video).then(() => n++)), fontsReady.then(() => n++)]);
+  loadProgress = () => n / 4;
+}
 
 // ---------- WebGL ----------
 const canvas = $('.gl');
@@ -245,7 +298,7 @@ function update(t) {
   const vw = innerWidth, vh = innerHeight;
 
   // --- loader ---
-  const target = loaded / loadTotal;
+  const target = loadProgress();
   T.shown = Math.min(target, T.shown + dt * (REDUCED ? 10 : 0.85));
   if (T.loaderDone === null) {
     countEl.textContent = String(Math.round(T.shown * 100)).padStart(3, '0');
@@ -445,6 +498,14 @@ function driveVideosLive(video, t, dt) {
   if (!G.video.seeking && Math.abs(G.video.currentTime - g) > 0.5 / FPS) G.video.currentTime = g;
 }
 
+function driveSeq(video, t) {
+  const T = SOURCES.tex, C = SOURCES.clay, G = SOURCES.grip;
+  T.time = t % T.duration;
+  C.time = (T.time / T.duration) * C.duration;
+  G.smooth = G.smooth === undefined ? video.grip : lerp(G.smooth, video.grip, 0.3);
+  G.time = G.smooth;
+}
+
 function seek(src, time) {
   const v = src.video;
   const ft = frameTime(src, time);
@@ -482,7 +543,8 @@ if (!CAPTURE) {
     const dt = t - lastLoopT;
     lastLoopT = t;
     const { s, video } = update(t);
-    driveVideosLive(video, t, clamp(dt, 0, 0.1));
+    if (SEQ) driveSeq(video, t);
+    else driveVideosLive(video, t, clamp(dt, 0, 0.1));
     stage?.render(s);
   };
   requestAnimationFrame(loop);

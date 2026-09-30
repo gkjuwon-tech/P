@@ -6,8 +6,8 @@ const CAM_Z = 6;
 const FOV = 28;
 const GLYPHS = ' .·:-=+*#%@';
 
-function videoTexture(video) {
-  const t = new THREE.Texture(video);
+function mediaTexture() {
+  const t = new THREE.Texture();
   t.minFilter = THREE.LinearFilter;
   t.magFilter = THREE.LinearFilter;
   t.generateMipmaps = false;
@@ -129,7 +129,7 @@ export class Stage {
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.setPixelRatio(pixelRatio);
 
-    for (const s of Object.values(sources)) s.texture = videoTexture(s.video);
+    for (const s of Object.values(sources)) s.texture = mediaTexture();
 
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 50);
     this.camera.position.set(0, 0, CAM_Z);
@@ -263,12 +263,13 @@ export class Stage {
     };
     for (const k in need) {
       const src = this.sources[k];
-      const v = src.video;
-      // re-upload when the frame changed (or a capture seek landed); never mid-seek
-      if (need[k] && v.readyState >= 2 && !v.seeking && (src.dirty || v.currentTime !== src.lastUpload)) {
+      if (!need[k]) continue;
+      // re-upload only when the picture changed
+      const f = src.frame();
+      if (f && (f.key !== src.lastKey || f.el !== src.texture.image)) {
+        src.texture.image = f.el;
         src.texture.needsUpdate = true;
-        src.lastUpload = v.currentTime;
-        src.dirty = false;
+        src.lastKey = f.key;
       }
     }
 
